@@ -15,8 +15,11 @@
 Applied to four Canadian Prairie cities — **Edmonton**, **Saskatoon**, **Regina**, and **Winnipeg** — across sixteen years (2009–2025), the pipeline produces:
 
 1. An **era-stratification framework** identifying when Reddit-derived sentiment is and is not a reliable proxy for public safety perception
+
 2. **Climate-crime correlation and regression results** by city, with a trend-robustness check (detrended and first-difference correlations)
+
 3. **Geospatial visualisations** of crime intensity and sentiment change across the Prairie region
+
 4. **Reproducible statistical test outputs** for all tests reported in the article
 
 ---
@@ -194,16 +197,6 @@ Every era uses the same inclusion rule: posts matching the crime or weather keyw
 - Test 5b: OLS regression + Durbin-Watson (multivariate climate-crime)
 - Test 5c: Trend robustness (detrended and first-difference climate-crime correlations)
 
-## Rebuilding Derived Data
-
-```bash
-python data_acquistion/sentiment_2009_2013.py   # Era 1: study subreddits only, VADER-scored
-python data_acquistion/impute_climate.py        # Imputed daily climate + monthly/yearly summaries
-```
-
-Both scripts write to `data/` and mirror their outputs to `raw_data/Master_Data/`.
-
----
 
 ## Data Sources
 
@@ -254,5 +247,4 @@ The pipeline identifies five analytically distinct eras in the 2009–2025 Reddi
 
 ## Licence
 
-- **Code:** MIT Licence — see `LICENSE`
 - **Data:** CC BY 4.0 — see Zenodo archive
