@@ -223,18 +223,20 @@ The pipeline identifies five analytically distinct eras in the 2009–2025 Reddi
 ## Key Findings
 
 - **Edmonton** is the only city with robust climate-crime associations: mean humidity (r = −0.694, p = 0.004) and cooling degree days (r = +0.701, p = 0.004) significantly predict annual violent crime, consistent with a hot-dry physiological stress mechanism
+  
 - A post-2019 humidity decline of −7.3 percentage points in Edmonton coincides with a 49.8% increase in violent crime (2010–2024)
+  
 - **Winnipeg** shows no climate-crime associations despite the highest cooling degree days of any city (203/yr), confirming that heat load alone is insufficient and pointing to socioeconomic drivers
+  
 - **Regina** maintains a persistently positive sentiment profile across all five eras despite high per-capita crime severity — a structural discourse anomaly confirmed by Mann-Whitney U Bonferroni-corrected comparisons in all analytically tractable eras
+  
 - The era-stratification framework demonstrates that Reddit sentiment collapses as a reliable crime perception proxy during exogenous shocks (Era 3, pandemic), with Wilcoxon divergence lost in Regina (p = 0.394) and Winnipeg (p = 0.597) while retained in Edmonton and Saskatoon
 
 ---
 
 ## Citation
 
-If you use this pipeline or dataset in your research, please cite:
-
-> Ryan Ocampo. (2026). *Climate Variability, Urban Crime, and Public Perceptions of Safety: A Social Media Sentiment Analysis of Canadian Prairie Cities*. Computers, Environment and Urban Systems. 
+> Jayasooriya, V., & Ocampo, R. (2026). *Climate Variability, Urban Crime, and Public Perceptions of Safety: A Social Media Sentiment Analysis of Canadian Prairie Cities*. Computers, Environment and Urban Systems.
 
 ---
 
