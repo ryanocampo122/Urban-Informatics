@@ -2,10 +2,6 @@
 
 **An open-source Python pipeline integrating climate, crime, and social media sentiment data for longitudinal urban safety monitoring across Canadian Prairie cities.**
 
-Submitted to: *Computers, Environment and Urban Systems* — Special Issue: Open Urban Data Science  
-Repository: `Urban Informatics`  
-Licence: MIT (code) | CC BY 4.0 (data)
-
 ---
 
 ## Overview
@@ -217,7 +213,7 @@ Both scripts write to `data/` and mirror their outputs to `raw_data/Master_Data/
 | Violent crime (UCR) | Statistics Canada Table 35-10-0177-01 | 2010–2024 | [statcan.gc.ca](https://www.statcan.gc.ca) |
 | Reddit sentiment (Eras 1–5) | PullPush archive (2009–2013) + Reddit API (2014–2025) | 2009–2025 | Archived on Zenodo (DOI: https://doi.org/10.5281/zenodo.20161031) |
 
-All processed datasets used in this study are archived on Zenodo under CC BY 4.0:  
+All processed datasets used in this study are archived on Zenodo under CC BY 4.0:
 **DOI: https://doi.org/10.5281/zenodo.20161031**
 
 ---
@@ -239,13 +235,13 @@ The pipeline identifies five analytically distinct eras in the 2009–2025 Reddi
 ## Key Findings
 
 - **Edmonton**'s annual violent crime correlates with mean humidity (r = −0.744, p = 0.002) and cooling degree days (r = +0.707, p = 0.003), but neither association survives removal of the shared 2010–2024 trend (detrended r = +0.27 and +0.11, both p > 0.3). No city shows a trend-robust climate-crime association.
-  
+
 - Edmonton's post-2019 drying (−7.4 percentage points) and rising violent crime (+26.8% over 2019–2024; +49.8% over 2010–2024) are coincident trends that annual data cannot link causally
-  
+
 - **Winnipeg** shows no climate-crime associations despite the highest cooling degree days of any city (207/yr)
-  
+
 - **Regina** maintains a persistently positive sentiment profile across all five eras despite high per-capita crime severity — a discourse anomaly confirmed by Bonferroni-corrected Mann-Whitney U comparisons in Eras 2 and 4, and robust to dropping the provincial subreddits
-  
+
 - During the pandemic (Era 3), crime vs. non-crime divergence is lost in Regina (p = 0.111) and Winnipeg (p = 0.268) but retained in Edmonton and Saskatoon (p < 0.001), and no inter-city test is significant; that inter-city convergence depends on pooling the provincial subreddits
 
 ---
