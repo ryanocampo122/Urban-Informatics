@@ -30,18 +30,17 @@ Methodological Notes
 - Data is standardized for integration with crime and Reddit sentiment datasets
 """
 
+from io import StringIO
+
 import requests
 import pandas as pd
-from datetime import date
-from io import StringIO
-import numpy as np
 
 # --- CONFIGURATION (Edmonton) ---
 CITY_NAME = "Edmonton"
-STATION_ID = 27214      
+STATION_ID = 27214
 START_YEAR = 2010
 END_YEAR = 2025
-TIMEFRAME_HOURLY = 1 
+TIMEFRAME_HOURLY = 1
 TIMEFRAME_DAILY_SUMMARY = 2
 
 BASE_URL = (
@@ -53,12 +52,12 @@ BASE_URL = (
 
 # --- COLUMN DEFINITIONS ---
 POTENTIAL_DATE_COLUMNS = [
-    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)', 
+    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)',
     'Date/Time (PST)', 'Date/Time (EST)', 'Date/Time (AST)', 'True UTC Time', 'Date'
 ]
 
 HOURLY_COLUMN_MAPPING = {
-    'Temp (°C)': 'Temperature_C', 'Temperature (°C)': 'Temperature_C', 'Temp': 'Temperature_C', 
+    'Temp (°C)': 'Temperature_C', 'Temperature (°C)': 'Temperature_C', 'Temp': 'Temperature_C',
     'Rel Hum (%)': 'Relative_Humidity_Pct', 'Relative Humidity (%)': 'Relative_Humidity_Pct',
     'Rel Hum': 'Relative_Humidity_Pct', 'Relative Humidity': 'Relative_Humidity_Pct',
     'Precip. Amount (mm)': 'Precip_Amount_mm', 'Total Precip (mm)': 'Precip_Amount_mm',
@@ -66,22 +65,22 @@ HOURLY_COLUMN_MAPPING = {
 }
 
 DAILY_SUMMARY_COLUMN_MAPPING = {
-    'Mean Temp (°C)': 'Temperature_C_mean', 
-    'Max Temp (°C)': 'Temperature_C_max', 
-    'Min Temp (°C)': 'Temperature_C_min', 
+    'Mean Temp (°C)': 'Temperature_C_mean',
+    'Max Temp (°C)': 'Temperature_C_max',
+    'Min Temp (°C)': 'Temperature_C_min',
     'Total Precip (mm)': 'Precip_Amount_mm_sum'
 }
 
 MONTHLY_YEARLY_AGG_RULES = {
-    'Temperature_C_mean': 'mean', 
-    'Temperature_C_max': 'mean', 
-    'Temperature_C_min': 'mean', 
-    'Relative_Humidity_Pct_mean': 'mean', 
+    'Temperature_C_mean': 'mean',
+    'Temperature_C_max': 'mean',
+    'Temperature_C_min': 'mean',
+    'Relative_Humidity_Pct_mean': 'mean',
     'Precip_Amount_mm_sum': 'sum',
 }
 
 
-def clean_and_standardize(df, mapping, timeframe):
+def clean_and_standardize(df, mapping):
     """
     Clean and standardize raw climate data from ECCC.
 
@@ -96,10 +95,6 @@ def clean_and_standardize(df, mapping, timeframe):
         Raw dataset retrieved from the ECCC API.
     mapping : dict
         Dictionary mapping original column names to standardized variable names.
-    timeframe : int
-        Data resolution indicator:
-        - 1 = hourly data
-        - 2 = daily summary data
 
     Returns
     -------
@@ -112,7 +107,8 @@ def clean_and_standardize(df, mapping, timeframe):
     - Numeric conversion uses coercion to prevent parsing failures.
     - Designed to support downstream aggregation and modeling.
     """
-    if df.empty: return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
 
     df.columns = df.columns.str.strip()
 
@@ -175,7 +171,7 @@ def download_raw_data(station_id, year, month, timeframe):
     url = BASE_URL.format(station_id=station_id, year=year, month=month, timeframe=timeframe)
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
 
         raw_text = response.text
@@ -185,9 +181,11 @@ def download_raw_data(station_id, year, month, timeframe):
         for i, line in enumerate(lines[:30]):
             if 'Date/Time' in line or (timeframe == 2 and 'Date' in line):
                 if timeframe == 1 and ('Temp' in line or 'Rel Hum' in line):
-                    header_row_index = i; break
-                elif timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
-                    header_row_index = i; break
+                    header_row_index = i
+                    break
+                if timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
+                    header_row_index = i
+                    break
 
         if header_row_index == -1:
             return None, 0
@@ -200,7 +198,7 @@ def download_raw_data(station_id, year, month, timeframe):
 
         return df, len(df)
 
-    except Exception:
+    except (requests.RequestException, ValueError):
         return None, 0
 
 
@@ -274,7 +272,7 @@ def process_city():
             if hourly_rows > 0:
                 print(f" Hourly data {year}-{month:02d} ({hourly_rows} rows)")
                 hourly_data_list.append(
-                    clean_and_standardize(hourly_df, HOURLY_COLUMN_MAPPING, TIMEFRAME_HOURLY)
+                    clean_and_standardize(hourly_df, HOURLY_COLUMN_MAPPING)
                 )
 
             # Download daily summary data (temperature + precipitation)
@@ -282,7 +280,7 @@ def process_city():
             if daily_rows > 0:
                 print(f" Daily summary {year}-{month:02d} ({daily_rows} rows)")
                 daily_summary_list.append(
-                    clean_and_standardize(daily_df, DAILY_SUMMARY_COLUMN_MAPPING, TIMEFRAME_DAILY_SUMMARY)
+                    clean_and_standardize(daily_df, DAILY_SUMMARY_COLUMN_MAPPING)
                 )
 
     if not daily_summary_list:

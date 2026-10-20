@@ -34,26 +34,24 @@ Methodological Notes
 - Duplicate timestamps are resolved by keeping the first occurrence
 """
 
+from io import StringIO
+
 import requests
 import pandas as pd
-from datetime import date
-from io import StringIO
-import numpy as np
 
 # --- CONFIGURATION (Regina - Multiple Stations) ---
 CITY_NAME = "Regina"
 
 # Station priority order (highest priority first)
 STATION_IDS = [
-    50877,  # Regina Intl A (current)
+    50877,  # unverified (no data returned in spot checks)
     28011,  # Regina RCS
-    3002,   # Regina Airport (historical)
-    47707,  # Regina A (backup)
+    3002,   # Regina Int'l A
 ]
 
 START_YEAR = 2010
 END_YEAR = 2025
-TIMEFRAME_HOURLY = 1 
+TIMEFRAME_HOURLY = 1
 TIMEFRAME_DAILY_SUMMARY = 2
 
 BASE_URL = (
@@ -65,12 +63,12 @@ BASE_URL = (
 
 # --- COLUMN DEFINITIONS ---
 POTENTIAL_DATE_COLUMNS = [
-    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)', 
+    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)',
     'Date/Time (PST)', 'Date/Time (EST)', 'Date/Time (AST)', 'True UTC Time', 'Date'
 ]
 
 HOURLY_COLUMN_MAPPING = {
-    'Temp (°C)': 'Temperature_C', 'Temperature (°C)': 'Temperature_C', 'Temp': 'Temperature_C', 
+    'Temp (°C)': 'Temperature_C', 'Temperature (°C)': 'Temperature_C', 'Temp': 'Temperature_C',
     'Rel Hum (%)': 'Relative_Humidity_Pct', 'Relative Humidity (%)': 'Relative_Humidity_Pct',
     'Rel Hum': 'Relative_Humidity_Pct', 'Relative Humidity': 'Relative_Humidity_Pct',
     'Precip. Amount (mm)': 'Precip_Amount_mm', 'Total Precip (mm)': 'Precip_Amount_mm',
@@ -78,22 +76,22 @@ HOURLY_COLUMN_MAPPING = {
 }
 
 DAILY_SUMMARY_COLUMN_MAPPING = {
-    'Mean Temp (°C)': 'Temperature_C_mean', 
-    'Max Temp (°C)': 'Temperature_C_max', 
-    'Min Temp (°C)': 'Temperature_C_min', 
+    'Mean Temp (°C)': 'Temperature_C_mean',
+    'Max Temp (°C)': 'Temperature_C_max',
+    'Min Temp (°C)': 'Temperature_C_min',
     'Total Precip (mm)': 'Precip_Amount_mm_sum'
 }
 
 MONTHLY_YEARLY_AGG_RULES = {
-    'Temperature_C_mean': 'mean', 
-    'Temperature_C_max': 'mean', 
-    'Temperature_C_min': 'mean', 
-    'Relative_Humidity_Pct_mean': 'mean', 
+    'Temperature_C_mean': 'mean',
+    'Temperature_C_max': 'mean',
+    'Temperature_C_min': 'mean',
+    'Relative_Humidity_Pct_mean': 'mean',
     'Precip_Amount_mm_sum': 'sum',
 }
 
 
-def clean_and_standardize(df, mapping, timeframe):
+def clean_and_standardize(df, mapping):
     """
     Clean and standardize raw climate data.
 
@@ -108,10 +106,6 @@ def clean_and_standardize(df, mapping, timeframe):
         Raw dataset retrieved from ECCC API.
     mapping : dict
         Mapping from original column names to standardized variables.
-    timeframe : int
-        Data resolution indicator:
-        - 1 = hourly data
-        - 2 = daily summary data
 
     Returns
     -------
@@ -124,7 +118,8 @@ def clean_and_standardize(df, mapping, timeframe):
     - Removes invalid timestamps
     - Designed for integration with aggregation and modeling pipeline
     """
-    if df.empty: return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
 
     df.columns = df.columns.str.strip()
 
@@ -195,9 +190,11 @@ def download_raw_data(station_id, year, month, timeframe):
         for i, line in enumerate(lines[:30]):
             if 'Date/Time' in line or (timeframe == 2 and 'Date' in line):
                 if timeframe == 1 and ('Temp' in line or 'Rel Hum' in line):
-                    header_row_index = i; break
-                elif timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
-                    header_row_index = i; break
+                    header_row_index = i
+                    break
+                if timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
+                    header_row_index = i
+                    break
 
         if header_row_index == -1:
             return None, 0
@@ -209,7 +206,7 @@ def download_raw_data(station_id, year, month, timeframe):
 
         return df, len(df)
 
-    except Exception:
+    except (requests.RequestException, ValueError):
         return None, 0
 
 
@@ -265,7 +262,7 @@ def process_city():
     """
     print(f"\n=== Collecting {CITY_NAME} Climate {START_YEAR}–{END_YEAR} ===")
     print(f"Using multiple stations: {STATION_IDS}")
-    
+
     hourly_data_list = []
     daily_summary_list = []
 
@@ -274,24 +271,28 @@ def process_city():
             # Try each station until we get data
             hourly_downloaded = False
             daily_downloaded = False
-            
+
             for station_id in STATION_IDS:
                 # Download HOURLY data for RH
                 if not hourly_downloaded:
                     hourly_df, hourly_rows = download_raw_data(station_id, year, month, TIMEFRAME_HOURLY)
                     if hourly_rows > 0:
-                        print(f"Hourly data {year}-{month:02d} from Station {station_id} ({hourly_rows} rows)")
-                        hourly_data_list.append(clean_and_standardize(hourly_df, HOURLY_COLUMN_MAPPING, TIMEFRAME_HOURLY))
+                        print(f"Hourly data {year}-{month:02d} from Station {station_id} "
+                              f"({hourly_rows} rows)")
+                        hourly_data_list.append(clean_and_standardize(
+                            hourly_df, HOURLY_COLUMN_MAPPING))
                         hourly_downloaded = True
 
                 # Download DAILY summary for Temp & Precip
                 if not daily_downloaded:
                     daily_df, daily_rows = download_raw_data(station_id, year, month, TIMEFRAME_DAILY_SUMMARY)
                     if daily_rows > 0:
-                        print(f" Daily summary {year}-{month:02d} from Station {station_id} ({daily_rows} rows)")
-                        daily_summary_list.append(clean_and_standardize(daily_df, DAILY_SUMMARY_COLUMN_MAPPING, TIMEFRAME_DAILY_SUMMARY))
+                        print(f" Daily summary {year}-{month:02d} from Station {station_id} "
+                              f"({daily_rows} rows)")
+                        daily_summary_list.append(clean_and_standardize(
+                            daily_df, DAILY_SUMMARY_COLUMN_MAPPING))
                         daily_downloaded = True
-                
+
                 # If both are downloaded, move to next month
                 if hourly_downloaded and daily_downloaded:
                     break

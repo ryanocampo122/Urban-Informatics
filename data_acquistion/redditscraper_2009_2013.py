@@ -37,29 +37,30 @@ Research Context
 - Enables analysis of early climate–crime perception patterns
 """
 
-import requests
 import time
 import random
 import csv
 from datetime import datetime, timedelta
+
+import requests
 
 # --- CONFIGURATION: EXPANDED KEYWORDS ---
 CITIES = ["Saskatoon", "Regina", "Winnipeg", "Edmonton"]
 
 # Crime-related keywords
 CRIME_KEYWORDS = [
-    "crime", "theft", "assault", "police", "vandalism", "homicide", 
-    "stolen", "gang", "drug crime", "break-in", "robbery", "shooting", 
-    "violence", "incident", "arrest", "jail", "suspect", "charge", 
+    "crime", "theft", "assault", "police", "vandalism", "homicide",
+    "stolen", "gang", "drug crime", "break-in", "robbery", "shooting",
+    "violence", "incident", "arrest", "jail", "suspect", "charge",
     "weapon", "property crime", "victim", "car prowl", "shoplifting",
     "bail", "law enforcement", "911"
 ]
 
 # Climate and weather-related keywords
 WEATHER_KEYWORDS = [
-    "weather", "heatwave", "blizzard", "flood", "drought", "extreme cold", 
-    "severe weather", "ice storm", "storm", "hail", "cold snap", 
-    "record high", "record low", "humidity", "snow", "rain", 
+    "weather", "heatwave", "blizzard", "flood", "drought", "extreme cold",
+    "severe weather", "ice storm", "storm", "hail", "cold snap",
+    "record high", "record low", "humidity", "snow", "rain",
     "power outage", "emergency", "temperature", "heat advisory",
     "freezing rain", "wind chill", "precipitation", "urban heat"
 ]
@@ -120,14 +121,14 @@ def search_pullpush_archive(query, after, before, size=100):
         'sort': 'desc',
         'sort_type': 'created_utc'
     }
-    
+
     try:
         response = requests.get(BASE_URL, params=params, timeout=15)
         response.raise_for_status()
-        data = response.json()
-        
-        if 'data' in data:
-            return data['data']
+        payload = response.json()
+
+        if 'data' in payload:
+            return payload['data']
         return []
 
     except requests.exceptions.RequestException as e:
@@ -150,8 +151,9 @@ while current_date < END_DATE:
     start_epoch = date_to_epoch(current_date)
     end_date_window = min(current_date + TIME_INCREMENT, END_DATE)
     end_epoch = date_to_epoch(end_date_window)
-    
-    print(f"\nProcessing window: {current_date.year}-{current_date.month:02d} to {end_date_window.year}-{end_date_window.month:02d}")
+
+    print(f"\nProcessing window: {current_date.year}-{current_date.month:02d} "
+          f"to {end_date_window.year}-{end_date_window.month:02d}")
 
     for city in CITIES:
         for keyword in CRIME_KEYWORDS + WEATHER_KEYWORDS:
@@ -160,7 +162,7 @@ while current_date < END_DATE:
             search_query = f'"{city}" AND "{keyword}"'
 
             data = search_pullpush_archive(search_query, start_epoch, end_epoch)
-            
+
             if data:
                 for item in data:
                     cleaned_item = {
@@ -176,8 +178,9 @@ while current_date < END_DATE:
                         'score': item.get('score', 0)
                     }
                     all_collected_data.append(cleaned_item)
-                
-                print(f"    Collected {len(data)} items for {city} + {keyword}. Total: {len(all_collected_data)}")
+
+                print(f"    Collected {len(data)} items for {city} + {keyword}. "
+                      f"Total: {len(all_collected_data)}")
 
                 # API rate limiting
                 time.sleep(random.uniform(0.5, 1.5))
@@ -193,7 +196,7 @@ if all_collected_data:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(all_collected_data)
-    
+
     print(f"\n\n**Data collection complete!** Saved {len(all_collected_data)} records to {OUTPUT_FILE}")
     print("Dataset ready for sentiment and temporal analysis.")
 

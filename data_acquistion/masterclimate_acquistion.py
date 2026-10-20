@@ -34,23 +34,26 @@ Methodological Notes
 - Daily summaries provide temperature, precipitation, and derived indices
 - Final datasets are structured for integration with crime and sentiment data
 """
+from io import StringIO
+
 import requests
 import pandas as pd
-from datetime import date
-from io import StringIO
-import numpy as np
 
 # --- CONFIGURATION (All Cities) ---
+# Station priority order per city (first station returning a month of data is used).
+# Names verified against the ECCC bulk-data service; IDs marked "unverified"
+# returned no data in spot checks.
 CITIES_CONFIG = {
-    "Saskatoon": [47707, 28011, 40578, 3328],  # RCS, Diefenbaker Airport, Airport, Historical
-    "Edmonton": [27214, 1867, 50149, 27211],  # Blatchford, Int'l A, City Centre, Historical
-    "Regina": [50877, 28011, 3002, 47707],  # Int'l A, RCS, Airport, Historical
-    "Winnipeg": [27174, 3698, 51097, 27375]  # Richardson Int'l, Int'l A, James Armstrong, Historical
+    "Saskatoon": [47707, 3328, 40578],  # Saskatoon RCS, Saskatoon Diefenbaker Int'l A, unverified
+    "Edmonton": [27214, 1867, 50149],  # Edmonton Blatchford, Edmonton City Centre A, Edmonton Intl A
+    "Regina": [50877, 28011, 3002],  # unverified, Regina RCS, Regina Int'l A
+    # Winnipeg A CS, Winnipeg Richardson Int'l A, Winnipeg Intl A, unverified
+    "Winnipeg": [27174, 3698, 51097, 27375]
 }
 
 START_YEAR = 2010
 END_YEAR = 2025
-TIMEFRAME_HOURLY = 1 
+TIMEFRAME_HOURLY = 1
 TIMEFRAME_DAILY_SUMMARY = 2
 
 BASE_URL = (
@@ -62,7 +65,7 @@ BASE_URL = (
 
 # --- EXPANDED COLUMN DEFINITIONS ---
 POTENTIAL_DATE_COLUMNS = [
-    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)', 
+    'Date/Time', 'Date/Time (LST)', 'Date/Time (CST)', 'Date/Time (MST)',
     'Date/Time (PST)', 'Date/Time (EST)', 'Date/Time (AST)', 'True UTC Time', 'Date'
 ]
 
@@ -71,25 +74,25 @@ HOURLY_COLUMN_MAPPING = {
     # Temperature
     'Temp (°C)': 'Temperature_C', 'Temperature (°C)': 'Temperature_C', 'Temp': 'Temperature_C',
     'Dew Point Temp (°C)': 'Dew_Point_C', 'Dew Point Temperature (°C)': 'Dew_Point_C',
-    
+
     # Humidity
     'Rel Hum (%)': 'Relative_Humidity_Pct', 'Relative Humidity (%)': 'Relative_Humidity_Pct',
     'Rel Hum': 'Relative_Humidity_Pct', 'Relative Humidity': 'Relative_Humidity_Pct',
-    
+
     # Precipitation
     'Precip. Amount (mm)': 'Precip_Amount_mm', 'Total Precip (mm)': 'Precip_Amount_mm',
     'Total Precip': 'Precip_Amount_mm', 'Total Precip.': 'Precip_Amount_mm',
-    
+
     # Wind
     'Wind Spd (km/h)': 'Wind_Speed_kmh', 'Wind Speed (km/h)': 'Wind_Speed_kmh',
     'Wind Dir (10s deg)': 'Wind_Direction_deg', 'Wind Direction (10s deg)': 'Wind_Direction_deg',
-    
+
     # Pressure
     'Stn Press (kPa)': 'Station_Pressure_kPa', 'Station Pressure (kPa)': 'Station_Pressure_kPa',
-    
+
     # Visibility
     'Visibility (km)': 'Visibility_km', 'Visib (km)': 'Visibility_km',
-    
+
     # Comfort indices
     'Hmdx': 'Humidex', 'Humidex': 'Humidex',
     'Wind Chill': 'Wind_Chill', 'Wnd Chl': 'Wind_Chill',
@@ -98,19 +101,19 @@ HOURLY_COLUMN_MAPPING = {
 # Daily summary mapping (more comprehensive)
 DAILY_SUMMARY_COLUMN_MAPPING = {
     # Temperature
-    'Mean Temp (°C)': 'Temperature_C_mean', 'Max Temp (°C)': 'Temperature_C_max', 
+    'Mean Temp (°C)': 'Temperature_C_mean', 'Max Temp (°C)': 'Temperature_C_max',
     'Min Temp (°C)': 'Temperature_C_min',
-    
+
     # Precipitation
     'Total Precip (mm)': 'Precip_Amount_mm_sum',
     'Total Rain (mm)': 'Rain_mm_sum',
     'Total Snow (cm)': 'Snow_cm_sum',
     'Snow on Grnd (cm)': 'Snow_On_Ground_cm',
-    
+
     # Wind
     'Spd of Max Gust (km/h)': 'Max_Gust_Speed_kmh',
     'Dir of Max Gust (10s deg)': 'Max_Gust_Direction_deg',
-    
+
     # Degree Days
     'Cool Deg Days (°C)': 'Cooling_Degree_Days',
     'Heat Deg Days (°C)': 'Heating_Degree_Days',
@@ -119,41 +122,41 @@ DAILY_SUMMARY_COLUMN_MAPPING = {
 # Aggregation rules for monthly/yearly summaries
 MONTHLY_YEARLY_AGG_RULES = {
     # Temperature
-    'Temperature_C_mean': 'mean', 
-    'Temperature_C_max': 'mean', 
+    'Temperature_C_mean': 'mean',
+    'Temperature_C_max': 'mean',
     'Temperature_C_min': 'mean',
     'Dew_Point_C_mean': 'mean',
-    
+
     # Humidity
     'Relative_Humidity_Pct_mean': 'mean',
-    
+
     # Precipitation
     'Precip_Amount_mm_sum': 'sum',
     'Rain_mm_sum': 'sum',
     'Snow_cm_sum': 'sum',
     'Snow_On_Ground_cm_mean': 'mean',
-    
+
     # Wind
     'Wind_Speed_kmh_mean': 'mean',
     'Max_Gust_Speed_kmh_max': 'max',
-    
+
     # Pressure
     'Station_Pressure_kPa_mean': 'mean',
-    
+
     # Visibility
     'Visibility_km_mean': 'mean',
-    
+
     # Degree Days
     'Cooling_Degree_Days_sum': 'sum',
     'Heating_Degree_Days_sum': 'sum',
-    
+
     # Comfort Indices
     'Humidex_mean': 'mean',
     'Wind_Chill_mean': 'mean',
 }
 
 
-def clean_and_standardize(df, mapping, timeframe):
+def clean_and_standardize(df, mapping):
     """
     Clean and standardize the given DataFrame.
 
@@ -163,24 +166,25 @@ def clean_and_standardize(df, mapping, timeframe):
         The DataFrame to clean and standardize.
     mapping : dict
         A dictionary mapping original column names to standardized column names.
-    timeframe : int
-        The time frame of the data (1 for hourly, 2 for daily, etc.).
 
     Returns
     -------
     pandas.DataFrame
         The cleaned and standardized DataFrame.
     """
-    if df.empty: return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
     df.columns = df.columns.str.strip()
-    date_col_to_use = next((col for col in df.columns if any(col.strip() == p for p in POTENTIAL_DATE_COLUMNS)), None)
-    if date_col_to_use is None: return pd.DataFrame()
+    date_col_to_use = next(
+        (col for col in df.columns if any(col.strip() == p for p in POTENTIAL_DATE_COLUMNS)), None)
+    if date_col_to_use is None:
+        return pd.DataFrame()
 
     df.rename(columns={date_col_to_use: 'Date_Time'}, inplace=True)
     for source, target in mapping.items():
         if source in df.columns:
             df[target] = pd.to_numeric(df[source], errors='coerce')
-    
+
     df['Date_Time'] = pd.to_datetime(df['Date_Time'], errors='coerce')
     df.dropna(subset=['Date_Time'], inplace=True)
     df.sort_values(by='Date_Time', inplace=True)
@@ -216,19 +220,23 @@ def download_raw_data(station_id, year, month, timeframe):
         raw_text = response.text
         lines = raw_text.splitlines()
         header_row_index = -1
-        for i, line in enumerate(lines[:30]): 
+        for i, line in enumerate(lines[:30]):
             if 'Date/Time' in line or (timeframe == 2 and 'Date' in line):
                 if timeframe == 1 and ('Temp' in line or 'Rel Hum' in line):
-                    header_row_index = i; break
-                elif timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
-                    header_row_index = i; break
-        
-        if header_row_index == -1: return None, 0
+                    header_row_index = i
+                    break
+                if timeframe == 2 and ('Mean Temp' in line or 'Total Precip' in line):
+                    header_row_index = i
+                    break
+
+        if header_row_index == -1:
+            return None, 0
         data_io = StringIO(raw_text)
         df = pd.read_csv(data_io, header=header_row_index)
-        if df.empty or len(df) < 20: return None, 0
+        if df.empty or len(df) < 20:
+            return None, 0
         return df, len(df)
-    except Exception:
+    except (requests.RequestException, ValueError):
         return None, 0
 
 
@@ -279,7 +287,7 @@ def process_city(city_name, station_ids):
     print(f"=== Collecting {city_name} Climate Data {START_YEAR}–{END_YEAR} ===")
     print(f"{'='*60}")
     print(f"Using stations: {station_ids}")
-    
+
     hourly_data_list = []
     daily_summary_list = []
 
@@ -287,14 +295,15 @@ def process_city(city_name, station_ids):
         for month in range(1, 13):
             hourly_downloaded = False
             daily_downloaded = False
-            
+
             for station_id in station_ids:
                 # Download HOURLY data
                 if not hourly_downloaded:
-                  hourly_df, hourly_rows = download_raw_data(station_id, year, month, TIMEFRAME_HOURLY)
-                if hourly_rows > 0:
+                    hourly_df, hourly_rows = download_raw_data(station_id, year, month, TIMEFRAME_HOURLY)
+                    if hourly_rows > 0:
                         print(f" Hourly {year}-{month:02d} Station {station_id} ({hourly_rows} rows)")
-                        hourly_data_list.append(clean_and_standardize(hourly_df, HOURLY_COLUMN_MAPPING, TIMEFRAME_HOURLY))
+                        hourly_data_list.append(clean_and_standardize(
+                            hourly_df, HOURLY_COLUMN_MAPPING))
                         hourly_downloaded = True
 
                 # Download DAILY summary
@@ -302,9 +311,10 @@ def process_city(city_name, station_ids):
                     daily_df, daily_rows = download_raw_data(station_id, year, month, TIMEFRAME_DAILY_SUMMARY)
                     if daily_rows > 0:
                         print(f" Daily  {year}-{month:02d} Station {station_id} ({daily_rows} rows)")
-                        daily_summary_list.append(clean_and_standardize(daily_df, DAILY_SUMMARY_COLUMN_MAPPING, TIMEFRAME_DAILY_SUMMARY))
+                        daily_summary_list.append(clean_and_standardize(
+                            daily_df, DAILY_SUMMARY_COLUMN_MAPPING))
                         daily_downloaded = True
-                
+
                 if hourly_downloaded and daily_downloaded:
                     break
 
@@ -317,17 +327,18 @@ def process_city(city_name, station_ids):
     if hourly_data_list:
         master_hourly_df = pd.concat(hourly_data_list)
         master_hourly_df = master_hourly_df[~master_hourly_df.index.duplicated(keep='first')]
-        
+
         # Aggregate hourly to daily
         agg_dict = {}
         for col in master_hourly_df.columns:
-            if 'Temperature' in col or 'Dew_Point' in col or 'Humidity' in col or 'Pressure' in col or 'Visibility' in col or 'Humidex' in col or 'Wind_Chill' in col:
+            if any(key in col for key in ('Temperature', 'Dew_Point', 'Humidity', 'Pressure',
+                                          'Visibility', 'Humidex', 'Wind_Chill')):
                 agg_dict[col] = 'mean'
             elif 'Wind_Speed' in col:
                 agg_dict[col] = 'mean'
             elif 'Precip' in col:
                 agg_dict[col] = 'sum'
-        
+
         if agg_dict:
             hourly_daily_df = master_hourly_df.resample('D').agg(agg_dict)
             # Rename columns to indicate they're means/sums
@@ -345,7 +356,7 @@ def process_city(city_name, station_ids):
     daily_tp_df.index = daily_tp_df.index.normalize()
     daily_tp_df = daily_tp_df[~daily_tp_df.index.duplicated(keep='first')]
     daily_tp_df.index.name = 'Date'
-    
+
     # Rename degree days columns for aggregation
     if 'Cooling_Degree_Days' in daily_tp_df.columns:
         daily_tp_df.rename(columns={'Cooling_Degree_Days': 'Cooling_Degree_Days_sum'}, inplace=True)
@@ -359,90 +370,92 @@ def process_city(city_name, station_ids):
     # Merge Daily + Hourly
     final_daily_df = daily_tp_df.merge(hourly_daily_df, how='outer', left_index=True, right_index=True)
     final_daily_df.sort_index(inplace=True)
-    
+
     # Add city column
     final_daily_df.insert(0, 'City', city_name)
-    
+
     return final_daily_df
 
 
 def main():
     print(f"\n{'#'*60}")
-    print(f"### MASTER CLIMATE DATA COLLECTION FOR ALL CITIES ###")
+    print("### MASTER CLIMATE DATA COLLECTION FOR ALL CITIES ###")
     print(f"### Period: {START_YEAR} - {END_YEAR} ###")
     print(f"{'#'*60}")
-    
+
     all_cities_data = []
-    
+
     # Process each city
     for city_name, station_ids in CITIES_CONFIG.items():
         city_data = process_city(city_name, station_ids)
         if city_data is not None:
             all_cities_data.append(city_data)
-    
+
     if not all_cities_data:
         print("\n No data collected from any city. Exiting.")
         return
-    
+
     # Combine all cities
     master_daily_df = pd.concat(all_cities_data)
     master_daily_df.sort_values(by=['City', master_daily_df.index.name], inplace=True)
-    
+
     # Save Master Daily
     master_daily_filename = f"Master_All_Cities_Daily_Climate_{START_YEAR}_to_{END_YEAR}.csv"
     master_daily_df.to_csv(master_daily_filename)
     print(f"\n{'='*60}")
-    print(f"  MASTER DAILY DATA SUMMARY:")
+    print("  MASTER DAILY DATA SUMMARY:")
     print(f"   Total Rows: {len(master_daily_df)}")
     print(f"   Cities: {', '.join(CITIES_CONFIG.keys())}")
     print(f"   Date Range: {master_daily_df.index.min().date()} → {master_daily_df.index.max().date()}")
     print(f"   Total Columns: {len(master_daily_df.columns)}")
     print(f"   Columns: {', '.join(master_daily_df.columns)}")
     print(f" Saved → {master_daily_filename}")
-    
+
     # Create Monthly aggregations
     monthly_data_list = []
-    for city_name in CITIES_CONFIG.keys():
+    for city_name in CITIES_CONFIG:
         city_daily = master_daily_df[master_daily_df['City'] == city_name].drop('City', axis=1)
         if not city_daily.empty:
             # Only aggregate columns that exist and are in the rules
-            agg_dict = {col: agg for col, agg in MONTHLY_YEARLY_AGG_RULES.items() if col in city_daily.columns}
+            agg_dict = {col: agg for col, agg in MONTHLY_YEARLY_AGG_RULES.items()
+                        if col in city_daily.columns}
             if agg_dict:
                 monthly_df = city_daily.resample('ME').agg(agg_dict)
                 monthly_df.insert(0, 'City', city_name)
                 monthly_data_list.append(monthly_df)
-    
+
     if monthly_data_list:
         master_monthly_df = pd.concat(monthly_data_list)
         master_monthly_df.sort_values(by=['City', master_monthly_df.index.name], inplace=True)
         master_monthly_filename = f"Master_All_Cities_Monthly_Climate_{START_YEAR}_to_{END_YEAR}.csv"
         master_monthly_df.to_csv(master_monthly_filename)
-        print(f"\n MASTER MONTHLY DATA:")
+        print("\n MASTER MONTHLY DATA:")
         print(f"   Total Rows: {len(master_monthly_df)}")
         print(f"  Saved → {master_monthly_filename}")
-    
+
     # Create Yearly aggregations
     yearly_data_list = []
-    for city_name in CITIES_CONFIG.keys():
+    for city_name in CITIES_CONFIG:
         city_daily = master_daily_df[master_daily_df['City'] == city_name].drop('City', axis=1)
         if not city_daily.empty:
-            agg_dict = {col: agg for col, agg in MONTHLY_YEARLY_AGG_RULES.items() if col in city_daily.columns}
+            agg_dict = {col: agg for col, agg in MONTHLY_YEARLY_AGG_RULES.items()
+                        if col in city_daily.columns}
             if agg_dict:
                 yearly_df = city_daily.resample('YE').agg(agg_dict)
                 yearly_df.insert(0, 'City', city_name)
                 yearly_data_list.append(yearly_df)
-    
+
     if yearly_data_list:
         master_yearly_df = pd.concat(yearly_data_list)
         master_yearly_df.sort_values(by=['City', master_yearly_df.index.name], inplace=True)
         master_yearly_filename = f"Master_All_Cities_Yearly_Climate_{START_YEAR}_to_{END_YEAR}.csv"
         master_yearly_df.to_csv(master_yearly_filename)
-        print(f"\n MASTER YEARLY DATA:")
+        print("\n MASTER YEARLY DATA:")
         print(f"   Total Rows: {len(master_yearly_df)}")
         print(f"  Saved → {master_yearly_filename}")
-    
+
     print(f"\n{'#'*60}")
-    print(f"### SUCCESS! ALL CITIES PROCESSED ###")
+    print("### SUCCESS! ALL CITIES PROCESSED ###")
     print(f"{'#'*60}\n")
 
 

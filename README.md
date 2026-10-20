@@ -10,18 +10,18 @@ Licence: MIT (code) | CC BY 4.0 (data)
 
 ## Overview
 
-`Urban Informatics` is a reproducible Python pipeline that automates the acquisition, processing, normalisation, statistical analysis, and geospatial visualisation of three complementary open data streams:
+`Urban Informatics` is a reproducible Python pipeline that automates the acquisition, processing, harmonisation, statistical analysis, and geospatial visualisation of three complementary open data streams:
 
 - **Climate observations** — Environment and Climate Change Canada (ECCC) Historical Climate Data Portal
 - **Crime statistics** — Statistics Canada Uniform Crime Reporting (UCR) Survey (Table 35-10-0177-01)
-- **Social media sentiment** — Reddit posts from city-specific subreddits (via Pushshift archive and Reddit API)
+- **Social media sentiment** — Reddit posts from city-specific subreddits (via the PullPush archive for 2009–2013 and the Reddit API for 2014–2025)
 
 Applied to four Canadian Prairie cities — **Edmonton**, **Saskatoon**, **Regina**, and **Winnipeg** — across sixteen years (2009–2025), the pipeline produces:
 
 1. An **era-stratification framework** identifying when Reddit-derived sentiment is and is not a reliable proxy for public safety perception
-2. Verified **climate-crime correlation and regression results** by city
+2. **Climate-crime correlation and regression results** by city, with a trend-robustness check (detrended and first-difference correlations)
 3. **Geospatial visualisations** of crime intensity and sentiment change across the Prairie region
-4. **Reproducible statistical test outputs** for all six tests reported in the article
+4. **Reproducible statistical test outputs** for all tests reported in the article
 
 ---
 
@@ -39,7 +39,7 @@ Urban-Informatics/
 │   │   └── fig1_pipeline_architecture.py # Produces Figure 1 (no data required)
 │   │
 │   └── analysis/
-│       ├── statistical_analysis.py      # Runs all six statistical tests
+│       ├── statistical_analysis.py      # Runs all tests + subreddit-mapping sensitivity
 │       └── run_statistical_tests.py     # Runs tests and prints formatted tables
 │
 ├── data/
@@ -52,9 +52,10 @@ Urban-Informatics/
 │   │   ├── Actual_Incidents_Edmonton.csv
 │   │   ├── Actual_Incidents_Regina.csv
 │   │   ├── Actual_Incidents_Winnipeg.csv
-│   │   └── Actual_Incidents_incidents_Saskatoon.csv
+│   │   └── Actual_Incidents_incidents Saskatoon.csv
 │   │
 │   └── sentiment/
+│       ├── reddit_2009_2013_posts_sentiment.csv
 │       ├── reddit_climate_crime_2009_2013_sentiment.csv
 │       ├── reddit_climate_crime_2014_2019_sentiment.csv
 │       ├── reddit_climate_crime_2020_2021_sentiment.csv
@@ -66,17 +67,20 @@ Urban-Informatics/
 │       ├── reddit_2022_2023_for_gis.csv
 │       └── reddit_2024_2025_for_gis.csv
 │
-└── data_acquisiton/
+└── data_acquistion/
     ├── redditscraper_2009_2013.py
     ├── redditscraper_2014_2019.py
     ├── redditscraper_2020_2021.py
     ├── redditscraper_2022_2023.py
     ├── redditscraper_2024_2025.py
+    ├── reddit_common.py             # Shared steps for the 2014–2023 collectors
+    ├── sentiment_2009_2013.py       # Filters + VADER-scores Era 1 posts
     ├── acquistion_edmonton.py
-    ├── acuistion_regina.py
+    ├── acquistion_regina.py
     ├── acquistion_saskatoon.py
     ├── acquistion_winnipeg.py
-    └── masterclimate_acquistion.py
+    ├── masterclimate_acquistion.py
+    └── impute_climate.py            # Imputes daily climate; builds monthly/yearly
 └── figures/
     ├── fig1_pipeline_architecture.png
     ├── fig2_rolling_sentiment.png
@@ -136,12 +140,12 @@ Urban-Informatics/
 
 | Module | Name | Description |
 |--------|------|-------------|
-| M1 | Climate Acquisition | Multi-station averaging, variable imputation, HDD/CDD derivation |
+| M1 | Climate Acquisition | Priority-ordered station fallback (one station per city in practice), city-month imputation, HDD/CDD derivation |
 | M2 | Crime Integration | UCR violation mapping, annual aggregation to city level |
 | M3 | Reddit Corpus Collection | Keyword classification, subreddit mapping, 2009–2025 |
-| M4 | Sentiment Scoring | VADER compound scoring, categorical classification, crime-relevance filtering |
-| M5 | Normalisation & Bias Mitigation | Per-post weighting, per-user aggregation, z-score anomaly scoring, seasonal adjustment |
-| M6 | Statistical Analysis | Kruskal-Wallis, Mann-Whitney U, Chi-square, Wilcoxon, Pearson, OLS regression |
+| M4 | Sentiment Scoring | VADER compound scoring (all eras), categorical classification, crime-relevance filtering |
+| M5 | Corpus Harmonisation & Bias Checks | Era-consistent inclusion rule (crime or weather keywords), subreddit-to-city mapping, volume-bias check |
+| M6 | Statistical Analysis | Kruskal-Wallis, Mann-Whitney U, Chi-square, Pearson, OLS regression, trend robustness |
 | M7 | Geospatial Visualisation | Maps, polar charts, heatmaps, scatter panels, era comparison charts |
 
 ---
@@ -149,10 +153,10 @@ Urban-Informatics/
 ## Installation
 
 ```bash
-pip install pandas numpy scipy matplotlib statsmodels
+pip install pandas numpy scipy matplotlib
 ```
 
-No additional packages are required. All scripts run with Python 3.8+.
+The analysis and figure scripts need only these packages (Python 3.9+, pandas 2.2+). Data acquisition and the Era 1 rebuild also need `requests`, `praw` and `vaderSentiment`.
 
 ---
 
@@ -169,7 +173,7 @@ No data files required. Outputs `figures/fig1_pipeline_architecture.png`.
 python scripts/figures/generate_figures.py
 ```
 
-Before running, update the `DATA_DIR` and `OUT_DIR` variables at the top of the script to point to your local data directory and desired output directory respectively.
+Paths are resolved relative to the repository, so no configuration is needed.
 
 All seven figures are generated in a single run. Expected runtime: under 60 seconds on a standard laptop.
 
@@ -181,15 +185,27 @@ All seven figures are generated in a single run. Expected runtime: under 60 seco
 python scripts/analysis/run_statistical_tests.py
 ```
 
-Update `DATA_DIR` at the top of the script. The script runs all six tests in sequence and prints formatted results tables to the console, matching the numbers reported in Tables 4–10 of the article.
+Paths are resolved relative to the repository. The script runs all tests in sequence and prints formatted tables to the console, matching Tables 1–8 of the article. `statistical_analysis.py` runs the same tests and adds a sensitivity check with the provincial subreddits (r/alberta, r/saskatchewan, r/manitoba) dropped.
+
+Every era uses the same inclusion rule: posts matching the crime or weather keyword sets. The 2020–2021 collector also kept pandemic-keyword posts; these are excluded so Era 3 is comparable with the other eras.
 
 **Tests run:**
 - Test 1: Kruskal-Wallis H (inter-city polarity distributions)
 - Test 2: Mann-Whitney U with Bonferroni correction (pairwise city comparisons)
 - Test 3: Chi-square test of independence (categorical sentiment composition)
-- Test 4: Wilcoxon signed-rank (crime vs. non-crime sentiment divergence)
+- Test 4: Mann-Whitney U (crime vs. non-crime sentiment divergence, all posts)
 - Test 5a: Pearson correlations (bivariate climate-crime)
 - Test 5b: OLS regression + Durbin-Watson (multivariate climate-crime)
+- Test 5c: Trend robustness (detrended and first-difference climate-crime correlations)
+
+## Rebuilding Derived Data
+
+```bash
+python data_acquistion/sentiment_2009_2013.py   # Era 1: study subreddits only, VADER-scored
+python data_acquistion/impute_climate.py        # Imputed daily climate + monthly/yearly summaries
+```
+
+Both scripts write to `data/` and mirror their outputs to `raw_data/Master_Data/`.
 
 ---
 
@@ -199,7 +215,7 @@ Update `DATA_DIR` at the top of the script. The script runs all six tests in seq
 |---------|--------|-------|--------|
 | Climate (daily/monthly/yearly) | Environment and Climate Change Canada | 2010–2025 | [climate.weather.gc.ca](https://climate.weather.gc.ca) |
 | Violent crime (UCR) | Statistics Canada Table 35-10-0177-01 | 2010–2024 | [statcan.gc.ca](https://www.statcan.gc.ca) |
-| Reddit sentiment (Eras 1–5) | Pushshift archive + Reddit API | 2009–2025 | Archived on Zenodo (DOI: https://doi.org/10.5281/zenodo.20161031) |
+| Reddit sentiment (Eras 1–5) | PullPush archive (2009–2013) + Reddit API (2014–2025) | 2009–2025 | Archived on Zenodo (DOI: https://doi.org/10.5281/zenodo.20161031) |
 
 All processed datasets used in this study are archived on Zenodo under CC BY 4.0:  
 **DOI: https://doi.org/10.5281/zenodo.20161031**
@@ -212,7 +228,7 @@ The pipeline identifies five analytically distinct eras in the 2009–2025 Reddi
 
 | Era | Period | Status |
 |-----|--------|--------|
-| Era 1 | 2009–2013 | Baseline — sparse, monthly-aggregated data |
+| Era 1 | 2009–2013 | Descriptive only — sparse (14–136 posts per city) |
 | Era 2 | 2014–2019 | First analytically tractable era |
 | Era 3 | 2020–2021 | Excluded — pandemic disruption |
 | Era 4 | 2022–2023 | Post-pandemic re-stabilisation |
@@ -222,15 +238,15 @@ The pipeline identifies five analytically distinct eras in the 2009–2025 Reddi
 
 ## Key Findings
 
-- **Edmonton** is the only city with robust climate-crime associations: mean humidity (r = −0.694, p = 0.004) and cooling degree days (r = +0.701, p = 0.004) significantly predict annual violent crime, consistent with a hot-dry physiological stress mechanism
+- **Edmonton**'s annual violent crime correlates with mean humidity (r = −0.744, p = 0.002) and cooling degree days (r = +0.707, p = 0.003), but neither association survives removal of the shared 2010–2024 trend (detrended r = +0.27 and +0.11, both p > 0.3). No city shows a trend-robust climate-crime association.
   
-- A post-2019 humidity decline of −7.3 percentage points in Edmonton coincides with a 49.8% increase in violent crime (2010–2024)
+- Edmonton's post-2019 drying (−7.4 percentage points) and rising violent crime (+26.8% over 2019–2024; +49.8% over 2010–2024) are coincident trends that annual data cannot link causally
   
-- **Winnipeg** shows no climate-crime associations despite the highest cooling degree days of any city (203/yr), confirming that heat load alone is insufficient and pointing to socioeconomic drivers
+- **Winnipeg** shows no climate-crime associations despite the highest cooling degree days of any city (207/yr)
   
-- **Regina** maintains a persistently positive sentiment profile across all five eras despite high per-capita crime severity — a structural discourse anomaly confirmed by Mann-Whitney U Bonferroni-corrected comparisons in all analytically tractable eras
+- **Regina** maintains a persistently positive sentiment profile across all five eras despite high per-capita crime severity — a discourse anomaly confirmed by Bonferroni-corrected Mann-Whitney U comparisons in Eras 2 and 4, and robust to dropping the provincial subreddits
   
-- The era-stratification framework demonstrates that Reddit sentiment collapses as a reliable crime perception proxy during exogenous shocks (Era 3, pandemic), with Wilcoxon divergence lost in Regina (p = 0.394) and Winnipeg (p = 0.597) while retained in Edmonton and Saskatoon
+- During the pandemic (Era 3), crime vs. non-crime divergence is lost in Regina (p = 0.111) and Winnipeg (p = 0.268) but retained in Edmonton and Saskatoon (p < 0.001), and no inter-city test is significant; that inter-city convergence depends on pooling the provincial subreddits
 
 ---
 

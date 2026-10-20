@@ -1,11 +1,12 @@
 """
 ================================================================================
-UrbanSentinel-Prairie — Figure Generation Script
+Urban Informatics — Figure Generation Script
 ================================================================================
 Produces all 7 publication-quality figures for the article:
 
-    "Climate Variability, Urban Crime, and Public Perceptions of Safety:
-     A Social Media Sentiment Analysis of Canadian Prairie Cities"
+    "Urban Informatics: An Open-Source Computational Pipeline for Longitudinal
+     Urban Safety Monitoring Integrating Climate Data, Police Records, and
+     Social Media Sentiment"
 
 Figures generated:
     Fig 2 — Rolling mean sentiment trajectory (2009–2025)
@@ -19,8 +20,8 @@ Figures generated:
 Requirements:
     pip install pandas numpy matplotlib scipy
 
-Data files required (place in DATA_DIR or update paths below):
-    reddit_climate_crime_2009_2013_sentiment.csv  (Era 1 — monthly aggregated)
+Data files required (read from the repository's data/ folder):
+    reddit_2009_2013_posts_sentiment.csv          (Era 1 — post level)
     reddit_climate_crime_2014_2019_sentiment.csv  (Era 2 — post level)
     reddit_climate_crime_2020_2021_sentiment.csv  (Era 3 — post level)
     reddit_climate_crime_2022_2023_sentiment.csv  (Era 4 — post level)
@@ -31,35 +32,40 @@ Data files required (place in DATA_DIR or update paths below):
     Actual_Incidents_Edmonton.csv
     Actual_Incidents_Regina.csv
     Actual_Incidents_Winnipeg.csv
-    Actual_Incidents_incidents_Saskatoon.csv
+    Actual_Incidents_incidents Saskatoon.csv
     Master_All_Cities_Yearly_Climate_2010_to_2025_imputed.csv
 
 Usage:
     python generate_figures.py
 
 Output:
-    All figures saved as high-resolution PNG (300 DPI) to OUT_DIR.
+    All figures saved as high-resolution PNG (300 DPI) to the repository's figures/ folder (OUT_DIR).
 ================================================================================
 """
 
 import os
 import warnings
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+from matplotlib import patches
 import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 
+matplotlib.use('Agg')
 warnings.filterwarnings('ignore')
 
 # ── Directories ───────────────────────────────────────────────────────────────
-DATA_DIR = "/mnt/user-data/uploads"
-OUT_DIR  = "/home/claude/figures"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SENTIMENT_DIR = REPO_ROOT / 'data' / 'sentiment'
+CRIME_DIR = REPO_ROOT / 'data' / 'crime'
+CLIMATE_DIR = REPO_ROOT / 'data' / 'climate'
+OUT_DIR = REPO_ROOT / 'figures'
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # ── Shared constants ──────────────────────────────────────────────────────────
@@ -87,9 +93,9 @@ CITY_COORDS = {
 }
 
 CITY_LABEL_OFFSETS = {
-    'Edmonton':  ( 2.2,  0.6),
-    'Saskatoon': ( 1.8, -0.9),
-    'Regina':    ( 1.8,  0.5),
+    'Edmonton':  (2.2,  0.6),
+    'Saskatoon': (1.8, -0.9),
+    'Regina':    (1.8,  0.5),
     'Winnipeg':  (-7.8,  0.5),
 }
 
@@ -111,7 +117,7 @@ MAP_ASPECT = 1.0 / np.cos(np.radians(52.5))
 # Subreddit → canonical city name
 CITY_MAP = {
     'edmonton': 'Edmonton', 'alberta':      'Edmonton',
-    'saskatoon':'Saskatoon', 'saskatchewan': 'Saskatoon',
+    'saskatoon': 'Saskatoon', 'saskatchewan': 'Saskatoon',
     'regina':   'Regina',
     'winnipeg': 'Winnipeg', 'manitoba':     'Winnipeg',
 }
@@ -138,37 +144,37 @@ plt.rcParams.update({
 #  DATA LOADING HELPERS
 # ════════════════════════════════════════════════════════════════════════════
 
+ERA_FILES = [
+    ('Era 1', 'reddit_2009_2013_posts_sentiment.csv'),
+    ('Era 2', 'reddit_climate_crime_2014_2019_sentiment.csv'),
+    ('Era 3', 'reddit_climate_crime_2020_2021_sentiment.csv'),
+    ('Era 4', 'reddit_climate_crime_2022_2023_sentiment.csv'),
+    ('Era 5', 'reddit_climate_crime_2024_2025_sentiment.csv'),
+]
+
+
+def load_era_posts(fname):
+    """
+    Load one era's post-level sentiment file, map subreddits to cities, and
+    keep posts matching the crime or weather keyword sets (drops the
+    pandemic-only posts the 2020–2021 collector added).
+    """
+    df = pd.read_csv(SENTIMENT_DIR / fname)
+    df['city'] = df['subreddit'].str.lower().map(CITY_MAP)
+    in_scope = df['contains_crime_keywords'] | df['contains_weather_keywords']
+    return df[df['city'].isin(CITIES) & in_scope].copy()
+
+
 def load_all_sentiment():
     """
     Merge all five era sentiment files into a single long-format DataFrame
     with columns: city, date (monthly timestamp), sentiment_compound, era.
-
-    Era 1 is pre-aggregated at monthly resolution (mean_polarity used).
-    Eras 2–5 are post-level; aggregated to monthly means before merging.
     """
     frames = []
-
-    # ── Era 1: monthly aggregated ─────────────────────────────────
-    e1 = pd.read_csv(f'{DATA_DIR}/reddit_climate_crime_2009_2013_sentiment.csv')
-    e1['city']               = e1['city'].map(CITY_MAP).fillna(e1['city'])
-    e1['date']               = pd.to_datetime(e1['year_month'] + '-01')
-    e1['sentiment_compound'] = e1['mean_polarity']
-    e1['era']                = 'Era 1'
-    frames.append(e1[['city', 'date', 'sentiment_compound', 'era']])
-
-    # ── Eras 2–5: post-level ──────────────────────────────────────
-    era_files = [
-        ('Era 2', 'reddit_climate_crime_2014_2019_sentiment.csv'),
-        ('Era 3', 'reddit_climate_crime_2020_2021_sentiment.csv'),
-        ('Era 4', 'reddit_climate_crime_2022_2023_sentiment.csv'),
-        ('Era 5', 'reddit_climate_crime_2024_2025_sentiment.csv'),
-    ]
-    for era_name, fname in era_files:
-        df = pd.read_csv(f'{DATA_DIR}/{fname}', parse_dates=['created_date'])
-        df['city'] = df['subreddit'].str.lower().map(CITY_MAP)
-        df = df[df['city'].isin(CITIES)].copy()
-        df['era']  = era_name
-        df['date'] = (df['created_date']
+    for era_name, fname in ERA_FILES:
+        df = load_era_posts(fname)
+        df['era'] = era_name
+        df['date'] = (pd.to_datetime(df['created_date'], utc=True)
                       .dt.tz_localize(None)
                       .dt.to_period('M')
                       .dt.to_timestamp())
@@ -187,15 +193,15 @@ def load_crime():
         'Edmonton':  'Actual_Incidents_Edmonton.csv',
         'Regina':    'Actual_Incidents_Regina.csv',
         'Winnipeg':  'Actual_Incidents_Winnipeg.csv',
-        'Saskatoon': 'Actual_Incidents_incidents_Saskatoon.csv',
+        'Saskatoon': 'Actual_Incidents_incidents Saskatoon.csv',
     }
     out = {}
     for city, fname in crime_files.items():
-        df  = pd.read_csv(f'{DATA_DIR}/{fname}')
+        df = pd.read_csv(CRIME_DIR / fname)
         sub = (df[df['Violations'] == VIOLENT_VIOLATION][['REF_DATE', 'VALUE']]
                .rename(columns={'REF_DATE': 'year', 'VALUE': 'violent_crime'}))
         sub['year'] = sub['year'].astype(int)
-        out[city]   = sub.set_index('year')['violent_crime']
+        out[city] = sub.set_index('year')['violent_crime']
     return out
 
 
@@ -204,7 +210,7 @@ def load_climate():
     Load yearly imputed climate data for all four cities (2010–2024).
     """
     df = pd.read_csv(
-        f'{DATA_DIR}/Master_All_Cities_Yearly_Climate_2010_to_2025_imputed.csv'
+        CLIMATE_DIR / 'Master_All_Cities_Yearly_Climate_2010_to_2025_imputed.csv'
     )
     df['year'] = pd.to_datetime(df['Date']).dt.year
     return df[df['year'] <= 2024]
@@ -276,7 +282,7 @@ def fig2_rolling_sentiment():
     Data: all five reddit_climate_crime_*.csv files merged.
     """
     print("Fig 2 — Rolling mean sentiment trajectory...")
-    all_df  = load_all_sentiment()
+    all_df = load_all_sentiment()
     monthly = (all_df.groupby(['city', 'date'])['sentiment_compound']
                .mean().reset_index().sort_values(['city', 'date']))
 
@@ -290,7 +296,7 @@ def fig2_rolling_sentiment():
         ('2022-01-01', '2023-12-31', ERA_SHADE[3], ERA_LABELS[3]),
         ('2024-01-01', '2025-12-31', ERA_SHADE[4], ERA_LABELS[4]),
     ]
-    ymax = 0.65
+    ymax = 1.25  # full compound range plus room for era labels
     for start, end, color, label in era_dates:
         ax.axvspan(pd.Timestamp(start), pd.Timestamp(end),
                    alpha=0.35, color=color, zorder=0)
@@ -314,7 +320,7 @@ def fig2_rolling_sentiment():
 
     ax.axhline(0, color='#333333', linewidth=0.8, linestyle='-', alpha=0.5, zorder=2)
     ax.set_xlim(pd.Timestamp('2009-01-01'), pd.Timestamp('2025-12-31'))
-    ax.set_ylim(-0.55, ymax)
+    ax.set_ylim(-1.05, ymax)
     ax.set_xlabel('Date', fontsize=11)
     ax.set_ylabel('Mean Sentiment Score (3-month rolling mean)', fontsize=11)
     ax.set_title(
@@ -338,38 +344,47 @@ def fig2_rolling_sentiment():
 def fig3_volatility_heatmap():
     """
     4 × 5 colour grid: monthly sentiment standard deviation by city and era.
-    Darker cells = higher volatility.
+    Darker cells = higher volatility. Each cell also shows the median number
+    of posts per month, because months with few posts have noisier means.
     """
     print("Fig 3 — Sentiment volatility heatmap...")
-    all_df  = load_all_sentiment()
+    all_df = load_all_sentiment()
     monthly = (all_df.groupby(['city', 'era', 'date'])['sentiment_compound']
-               .mean().reset_index())
-    vol     = (monthly.groupby(['city', 'era'])['sentiment_compound']
-               .std().reset_index())
+               .agg(['mean', 'size']).reset_index())
+    vol = (monthly.groupby(['city', 'era'])
+           .agg(sd=('mean', 'std'), posts=('size', 'median'))
+           .reset_index())
 
-    era_order  = ['Era 1', 'Era 2', 'Era 3', 'Era 4', 'Era 5']
+    era_order = ['Era 1', 'Era 2', 'Era 3', 'Era 4', 'Era 5']
     era_labels = ERA_LABELS
 
     matrix = np.full((4, 5), np.nan)
+    posts = np.full((4, 5), np.nan)
     for i, city in enumerate(CITIES):
         for j, era in enumerate(era_order):
             row = vol[(vol['city'] == city) & (vol['era'] == era)]
             if len(row):
-                matrix[i, j] = row['sentiment_compound'].values[0]
+                matrix[i, j] = row['sd'].values[0]
+                posts[i, j] = row['posts'].values[0]
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
     im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto',
-                   vmin=0, vmax=0.55)
+                   vmin=0, vmax=0.80)
 
-    ax.set_xticks(range(5));   ax.set_xticklabels(era_labels, fontsize=10)
-    ax.set_yticks(range(4));   ax.set_yticklabels(CITIES, fontsize=10)
+    ax.set_xticks(range(5))
+    ax.set_xticklabels(era_labels, fontsize=10)
+    ax.set_yticks(range(4))
+    ax.set_yticklabels(CITIES, fontsize=10)
 
     for i in range(4):
         for j in range(5):
-            val   = matrix[i, j]
-            tcolor = 'white' if val > 0.30 else 'black'
-            ax.text(j, i, f'{val:.3f}', ha='center', va='center',
+            val = matrix[i, j]
+            tcolor = 'white' if val > 0.45 else 'black'
+            ax.text(j, i - 0.12, f'{val:.3f}', ha='center', va='center',
                     fontsize=10.5, fontweight='bold', color=tcolor)
+            unit = 'post' if posts[i, j] == 1 else 'posts'
+            ax.text(j, i + 0.22, f'{posts[i, j]:g} {unit}/mo', ha='center',
+                    va='center', fontsize=7.5, color=tcolor)
 
     cbar = plt.colorbar(im, ax=ax, shrink=0.85, pad=0.02)
     cbar.set_label('Std. Deviation', fontsize=10)
@@ -397,7 +412,7 @@ def fig4_climate_crime_scatter():
     """
     print("Fig 4 — Climate-crime scatter panels...")
     crime = load_crime()
-    clim  = load_climate()
+    clim = load_climate()
 
     vars_to_plot = [
         ('Relative_Humidity_Pct_mean', 'Mean Annual Relative Humidity (%)'),
@@ -419,14 +434,14 @@ def fig4_climate_crime_scatter():
             cr = crime[city].reset_index()
             merged = cl.merge(cr, on='year').dropna()
 
-            x     = merged[clim_var].values
-            y     = merged['violent_crime'].values
+            x = merged[clim_var].values
+            y = merged['violent_crime'].values
             years = merged['year'].values
 
             r, p = stats.pearsonr(x, y)
-            sig  = ('**' if p < 0.01 else
-                    ('*'  if p < 0.05 else
-                     ('†'  if p < 0.10 else 'ns')))
+            sig = ('**' if p < 0.01 else
+                   ('*' if p < 0.05 else
+                    ('†' if p < 0.10 else 'ns')))
 
             ax.scatter(x, y, color=CITY_COLORS[city], s=55, zorder=4,
                        alpha=0.85, marker=CITY_MARKERS[city],
@@ -438,8 +453,8 @@ def fig4_climate_crime_scatter():
                             fontsize=7, color='#444444')
 
             if len(x) > 2:
-                m, b   = np.polyfit(x, y, 1)
-                xline  = np.linspace(x.min(), x.max(), 100)
+                m, b = np.polyfit(x, y, 1)
+                xline = np.linspace(x.min(), x.max(), 100)
                 ax.plot(xline, m * xline + b, color=CITY_COLORS[city],
                         linewidth=1.5, linestyle='--', alpha=0.7, zorder=3)
 
@@ -450,8 +465,8 @@ def fig4_climate_crime_scatter():
                 xy=(0.05, 0.95), xycoords='axes fraction',
                 fontsize=8.5, va='top', ha='left',
                 color=sig_color, fontweight='bold',
-                bbox=dict(boxstyle='round,pad=0.3', fc='white',
-                          ec=sig_color, alpha=0.8)
+                bbox={'boxstyle': 'round,pad=0.3', 'fc': 'white',
+                      'ec': sig_color, 'alpha': 0.8}
             )
 
             ax.set_xlabel(xlabel, fontsize=8.5)
@@ -483,11 +498,11 @@ def fig5_proportional_maps():
     Map uses MAP_ASPECT correction for geographic accuracy at 52.5°N.
     """
     print("Fig 5 — Proportional symbol maps...")
-    crime      = load_crime()
+    crime = load_crime()
     snap_years = [2010, 2017, 2024]
-    all_vals   = [crime[c][y] for c in CITIES
-                  for y in snap_years if y in crime[c].index]
-    max_val    = max(all_vals)
+    all_vals = [crime[c][y] for c in CITIES
+                for y in snap_years if y in crime[c].index]
+    max_val = max(all_vals)
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 7))
     fig.patch.set_facecolor('white')
@@ -504,17 +519,17 @@ def fig5_proportional_maps():
 
         # Per-figure label offsets — fan SE cities apart clearly
         fig5_offsets = {
-            'Edmonton':  ( 1.8,  0.7),
-            'Saskatoon': ( 1.8,  0.5),
-            'Regina':    ( 1.8,  0.5),
-            'Winnipeg':  ( 1.8, -0.8),
+            'Edmonton':  (1.8,  0.7),
+            'Saskatoon': (1.8,  0.5),
+            'Regina':    (1.8,  0.5),
+            'Winnipeg':  (1.8, -0.8),
         }
 
         for city in CITIES:
             lat, lon = CITY_COORDS[city]
             if yr not in crime[city].index:
                 continue
-            val  = crime[city][yr]
+            val = crime[city][yr]
             size = (val / max_val) * 2200
 
             ax.scatter(lon, lat, s=size, color=CITY_COLORS[city],
@@ -529,8 +544,8 @@ def fig5_proportional_maps():
                 fontsize=8, fontweight='bold',
                 ha='left', va='center',
                 color=CITY_COLORS[city], zorder=8,
-                arrowprops=dict(arrowstyle='-',
-                                color=CITY_COLORS[city], lw=0.8)
+                arrowprops={'arrowstyle': '-',
+                            'color': CITY_COLORS[city], 'lw': 0.8}
             )
 
         if yr == snap_years[0]:
@@ -578,33 +593,10 @@ def fig6_era_comparison():
     print("Fig 6 — Era comparison chart...")
 
     rows = []
-
-    # Era 1 — pre-aggregated
-    e1 = pd.read_csv(f'{DATA_DIR}/reddit_climate_crime_2009_2013_sentiment.csv')
-    for city in CITIES:
-        c = e1[e1['city'] == city]
-        rows.append({
-            'era':       'Era 1\n2009–2013',
-            'city':       city,
-            'n_posts':    c['n_posts'].sum(),
-            'pct_crime': (c['n_posts_crime'].sum() / c['n_posts'].sum()
-                          if c['n_posts'].sum() > 0 else np.nan),
-            'mean_sent':  c['mean_polarity'].mean(),
-        })
-
-    # Eras 2–5 — post-level
-    era_files = [
-        ('Era 2\n2014–2019', 'reddit_climate_crime_2014_2019_sentiment.csv'),
-        ('Era 3\n2020–2021', 'reddit_climate_crime_2020_2021_sentiment.csv'),
-        ('Era 4\n2022–2023', 'reddit_climate_crime_2022_2023_sentiment.csv'),
-        ('Era 5\n2024–2025', 'reddit_climate_crime_2024_2025_sentiment.csv'),
-    ]
-    for era_label, fname in era_files:
-        df = pd.read_csv(f'{DATA_DIR}/{fname}')
-        df['city_clean'] = df['subreddit'].str.lower().map(CITY_MAP)
-        df = df[df['city_clean'].isin(CITIES)]
+    for era_label, (_, fname) in zip(ERA_LABELS, ERA_FILES):
+        df = load_era_posts(fname)
         for city in CITIES:
-            c = df[df['city_clean'] == city]
+            c = df[df['city'] == city]
             rows.append({
                 'era':       era_label,
                 'city':       city,
@@ -614,8 +606,8 @@ def fig6_era_comparison():
             })
 
     sumdf = pd.DataFrame(rows)
-    eras  = sumdf['era'].unique()
-    x     = np.arange(len(eras))
+    eras = sumdf['era'].unique()
+    x = np.arange(len(eras))
     width = 0.18
 
     fig, axes = plt.subplots(1, 3, figsize=(16, 5.5))
@@ -674,14 +666,14 @@ def fig7_spatial_sentiment():
     print("Fig 7 — Spatial sentiment change map...")
 
     def get_pct_neg(fname):
-        df = pd.read_csv(f'{DATA_DIR}/{fname}')
+        df = pd.read_csv(SENTIMENT_DIR / fname)
         df['city_clean'] = df['subreddit'].str.lower().map(CITY_MAP)
         df = df[df['city_clean'].isin(CITIES)]
         return (df.groupby('city_clean')
                   .apply(lambda x: (x['sentiment_category'] == 'negative').mean())
                   .to_dict())
 
-    pre   = get_pct_neg('reddit_2014_2019_for_gis.csv')
+    pre = get_pct_neg('reddit_2014_2019_for_gis.csv')
     post4 = get_pct_neg('reddit_2022_2023_for_gis.csv')
     post5 = get_pct_neg('reddit_2024_2025_for_gis.csv')
 
@@ -694,20 +686,20 @@ def fig7_spatial_sentiment():
 
     changes = {c: post.get(c, np.nan) - pre.get(c, np.nan) for c in CITIES}
 
-    cmap = plt.cm.RdYlGn_r
+    cmap = matplotlib.colormaps['RdYlGn_r']
     norm = mcolors.Normalize(vmin=0.28, vmax=0.52)
 
     # GridSpec: 2 map panels + 1 narrow colourbar column (no overlap)
     fig = plt.figure(figsize=(19, 7))
     fig.patch.set_facecolor('white')
-    gs  = GridSpec(1, 3, figure=fig,
-                   width_ratios=[1, 1, 0.045],
-                   wspace=0.12, left=0.05, right=0.97,
-                   top=0.88, bottom=0.10)
-    ax_pre  = fig.add_subplot(gs[0, 0])
+    gs = GridSpec(1, 3, figure=fig,
+                  width_ratios=[1, 1, 0.045],
+                  wspace=0.12, left=0.05, right=0.97,
+                  top=0.88, bottom=0.10)
+    ax_pre = fig.add_subplot(gs[0, 0])
     ax_post = fig.add_subplot(gs[0, 1])
     cbar_ax = fig.add_subplot(gs[0, 2])
-    axes    = [ax_pre, ax_post]
+    axes = [ax_pre, ax_post]
 
     fig.suptitle(
         'Figure 7. Spatial Distribution of Reddit Negative Sentiment:\n'
@@ -723,10 +715,10 @@ def fig7_spatial_sentiment():
     # Per-figure label offsets — override global ones for fig7
     # because cities are close together in the SE of the map
     fig7_offsets = {
-        'Edmonton':  ( 1.8,  0.7),
-        'Saskatoon': ( 1.8, -0.7),
-        'Regina':    ( 1.8,  0.5),
-        'Winnipeg':  ( 1.8, -0.7),
+        'Edmonton':  (1.8,  0.7),
+        'Saskatoon': (1.8, -0.7),
+        'Regina':    (1.8,  0.5),
+        'Winnipeg':  (1.8, -0.7),
     }
 
     for ax, (data, title, show_change) in zip(axes, period_data):
@@ -759,7 +751,7 @@ def fig7_spatial_sentiment():
                 fontsize=7.5, fontweight='bold',
                 ha='left', va='center',
                 color='#222222', zorder=8,
-                arrowprops=dict(arrowstyle='-', color='#666666', lw=0.7)
+                arrowprops={'arrowstyle': '-', 'color': '#666666', 'lw': 0.7}
             )
 
         ax.set_xlabel('Longitude', fontsize=8.5)
@@ -796,34 +788,29 @@ def fig8_polar_seasonal():
 
     season_order = ['Spring', 'Summer', 'Fall', 'Winter']
     frames = []
-    for fname in [
-        'reddit_climate_crime_2014_2019_sentiment.csv',
-        'reddit_climate_crime_2020_2021_sentiment.csv',
-        'reddit_climate_crime_2022_2023_sentiment.csv',
-        'reddit_climate_crime_2024_2025_sentiment.csv',
-    ]:
-        df = pd.read_csv(f'{DATA_DIR}/{fname}')
-        df['city_clean'] = df['subreddit'].str.lower().map(CITY_MAP)
-        df = df[df['city_clean'].isin(CITIES) & df['season'].notna()]
-        frames.append(df[['city_clean', 'season', 'sentiment_compound']])
+    for _, fname in ERA_FILES[1:]:
+        df = load_era_posts(fname)
+        df = df[df['season'].notna()].copy()
+        df['season'] = df['season'].str.title()  # data stores 'spring', 'fall', ...
+        frames.append(df[['city', 'season', 'sentiment_compound']])
 
-    all_df  = pd.concat(frames, ignore_index=True)
-    angles  = np.linspace(0, 2 * np.pi, len(season_order), endpoint=False).tolist()
+    all_df = pd.concat(frames, ignore_index=True)
+    angles = np.linspace(0, 2 * np.pi, len(season_order), endpoint=False).tolist()
     angles += angles[:1]
 
     fig, axes = plt.subplots(1, 4, figsize=(16, 5),
-                              subplot_kw={'projection': 'polar'})
+                             subplot_kw={'projection': 'polar'})
     fig.suptitle(
         'Figure 8. Seasonal Sentiment Patterns by City (Eras 2–5, 2014–2025)',
         fontsize=12, fontweight='bold', y=1.03
     )
 
     for ax, city in zip(axes, CITIES):
-        city_df = all_df[all_df['city_clean'] == city]
-        means   = [city_df[city_df['season'] == s]['sentiment_compound'].mean()
-                   for s in season_order]
-        means   = [v if not np.isnan(v) else 0 for v in means]
-        values  = means + means[:1]
+        city_df = all_df[all_df['city'] == city]
+        means = [city_df[city_df['season'] == s]['sentiment_compound'].mean()
+                 for s in season_order]
+        means = [v if not np.isnan(v) else 0 for v in means]
+        values = means + means[:1]
 
         ax.plot(angles, values, color=CITY_COLORS[city], linewidth=2.5, zorder=3)
         ax.fill(angles, values, color=CITY_COLORS[city], alpha=0.20, zorder=2)
@@ -855,7 +842,7 @@ def fig8_polar_seasonal():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("UrbanSentinel-Prairie — Figure Generation")
+    print("Urban Informatics — Figure Generation")
     print(f"Output directory: {OUT_DIR}")
     print("=" * 60)
     fig2_rolling_sentiment()
