@@ -30,6 +30,7 @@ Applied to four Canadian Prairie cities — **Edmonton**, **Saskatoon**, **Regin
 Urban-Informatics/
 │
 ├── README.md
+├── requirements.txt                 # Pinned Python dependencies
 ├── LICENSE
 │
 ├── scripts/
@@ -151,11 +152,27 @@ Urban-Informatics/
 
 ## Installation
 
+Requires Python 3.11 or newer (tested on Python 3.14).
+
 ```bash
-pip install pandas numpy scipy matplotlib
+pip install -r requirements.txt
 ```
 
-The analysis and figure scripts need only these packages (Python 3.9+, pandas 2.2+). Data acquisition and the Era 1 rebuild also need `requests`, `praw` and `vaderSentiment`.
+[`requirements.txt`](requirements.txt) pins the exact package versions used to produce the results in the article:
+
+| Package | Version | Used for |
+|---------|---------|----------|
+| pandas | 2.3.3 | Data loading and processing (all scripts) |
+| numpy | 2.3.4 | Numerical work in the analysis and figure scripts |
+| scipy | 1.16.3 | Statistical tests |
+| matplotlib | 3.10.7 | Figures 1–8 |
+| requests | 2.32.5 | ECCC climate downloads and the PullPush archive (Era 1) |
+| praw | 7.8.1 | Reddit API collectors (2014–2025) |
+| prawcore | 2.4.0 | Reddit API error handling in the collectors |
+| vaderSentiment | 3.3.2 | VADER sentiment scoring (all eras) |
+| python-dotenv | 1.2.1 | Loading Reddit API credentials from a `.env` file |
+
+To reproduce the statistics and figures only, the first four packages are enough; the rest are needed to re-collect or re-score the raw data.
 
 ---
 
