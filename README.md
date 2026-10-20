@@ -28,7 +28,7 @@ Applied to four Canadian Prairie cities — **Edmonton**, **Saskatoon**, **Regin
 ## Repository Structure
 
 ```
-prairie-urban-safety/
+Urban-Informatics/
 │
 ├── README.md
 ├── LICENSE
