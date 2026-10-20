@@ -3,14 +3,14 @@
 **An open-source Python pipeline integrating climate, crime, and social media sentiment data for longitudinal urban safety monitoring across Canadian Prairie cities.**
 
 Submitted to: *Computers, Environment and Urban Systems* — Special Issue: Open Urban Data Science  
-Repository: `prairie-urban-safety`  
+Repository: `Urban Informatics`  
 Licence: MIT (code) | CC BY 4.0 (data)
 
 ---
 
 ## Overview
 
-`prairie-urban-safety` is a reproducible Python pipeline that automates the acquisition, processing, normalisation, statistical analysis, and geospatial visualisation of three complementary open data streams:
+`Urban Informatics` is a reproducible Python pipeline that automates the acquisition, processing, normalisation, statistical analysis, and geospatial visualisation of three complementary open data streams:
 
 - **Climate observations** — Environment and Climate Change Canada (ECCC) Historical Climate Data Portal
 - **Crime statistics** — Statistics Canada Uniform Crime Reporting (UCR) Survey (Table 35-10-0177-01)
