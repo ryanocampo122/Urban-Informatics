@@ -4,6 +4,14 @@
 
 ---
 
+## Read the Paper
+
+[![Pages from the Urban Informatics manuscript — click to read the full paper](docs/manuscript-preview.png)](docs/Urban-Informatics-manuscript.pdf)
+
+**[Read the full manuscript (PDF, 35 pages)](docs/Urban-Informatics-manuscript.pdf)** — opens in GitHub's built-in viewer, so you can scroll through the whole paper in your browser without downloading it. The editable Word version is [`Urban Informatics - final formatted.docx`](Urban%20Informatics%20-%20final%20formatted.docx).
+
+---
+
 ## Overview
 
 `Urban Informatics` is a reproducible Python pipeline that automates the acquisition, processing, harmonisation, statistical analysis, and geospatial visualisation of three complementary open data streams:
@@ -32,6 +40,11 @@ Urban-Informatics/
 ├── README.md
 ├── requirements.txt                 # Pinned Python dependencies
 ├── LICENSE
+├── Urban Informatics - final formatted.docx   # Manuscript (Word)
+│
+├── docs/
+│   ├── Urban-Informatics-manuscript.pdf       # Manuscript (PDF, viewable on GitHub)
+│   └── manuscript-preview.png                 # README preview image
 │
 ├── scripts/
 │   ├── figures/
