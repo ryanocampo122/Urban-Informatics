@@ -167,7 +167,7 @@ pip install -r requirements.txt
 | scipy | 1.16.3 | Statistical tests |
 | matplotlib | 3.10.7 | Figures 1–8 |
 | requests | 2.32.5 | ECCC climate downloads and the PullPush archive (Era 1) |
-| praw | 7.8.1 | Reddit API collectors (2014–2025) |
+| praw | 7.8.1 | Reddit API collectors |
 | prawcore | 2.4.0 | Reddit API error handling in the collectors |
 | vaderSentiment | 3.3.2 | VADER sentiment scoring (all eras) |
 | python-dotenv | 1.2.1 | Loading Reddit API credentials from a `.env` file |
